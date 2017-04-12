@@ -40,3 +40,9 @@ Use flag variables to switch models on/off
 Use Env variables on top to tune NN backends
 
 Settings for all NN examples are similar so result are very close
+
+
+### Depends:
+
+python3.5-dev (via apt)
+python3.5-tk (via apt)

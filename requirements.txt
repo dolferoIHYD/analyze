@@ -1,0 +1,12 @@
+# To install packages via pip use:
+# pip install -r requirements.txt
+
+sklearn
+tensorflow
+# https://storage.googleapis.com/tensorflow/windows/cpu/tensorflow-1.0.1-cp35-cp35m-win_amd64.whl
+theano==0.8
+keras
+# lasagne
+https://github.com/Lasagne/Lasagne/archive/master.zip
+nolearn
+seaborn
