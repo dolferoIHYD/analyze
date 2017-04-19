@@ -1,4 +1,6 @@
 import os
+import time
+
 # Keras backend settings
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "5" # or coment it to use GPU by default
@@ -39,20 +41,28 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-KNN = 1
+
+class Profiler(object):
+    def __enter__(self):
+        self._startTime = time.time()
+
+    def __exit__(self, type, value, traceback):
+        print('Elapsed time: {:.3f} sec'.format(time.time()-self._startTime))
+
+KNN = 0
 SV = 0
-BAYES = 1
-RF = 1
+BAYES = 0
+RF = 0
 GP = 0
-MLP = 1
+MLP = 0
 KERAS = 1
-LASAGNE = 1
+LASAGNE = 0
 
 data = pd.read_csv('drivers_50000.csv')
 
 data.at[data['Accidents'] > 0, 'AccidentsBin'] = 1
 data.at[data['Accidents'] == 0, 'AccidentsBin'] = 0
- 
+
 XX = data[['Age', 'Experience', 'PreviousAccidents', 'RouteDistance', 'Distance', 'HomeLat', 'HomeLng', 'WorkLat', 'WorkLng']]
 y = data['AccidentsBin']
 
@@ -73,10 +83,13 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.5, rando
 
 print ("Dummy")
 y_dummy = np.empty_like(y_test)
+print(y_dummy)
 y_dummy[:] = np.average(y_test.values)
+print(y_dummy)
+
 average_probability = np.average(y_dummy)
-print ('probability: ', average_probability)    
-print ('brier_score_loss: ', metrics.brier_score_loss(y_test, y_dummy))    
+print ('probability: ', average_probability)
+print ('brier_score_loss: ', metrics.brier_score_loss(y_test, y_dummy))
 print ('profit: ', round(np.sum(y_dummy - y_test) / y_test.shape[0], 4))
 
 def PrintTest(est, calibrate=True):
@@ -85,7 +98,7 @@ def PrintTest(est, calibrate=True):
     if calibrate:
         isotonic = CalibratedClassifierCV(est, cv=2, method='isotonic')
         sigmoid = CalibratedClassifierCV(est, cv=2, method='sigmoid')
-        clfs = clfs + [(isotonic, 'Isotonic'), (sigmoid, 'Sigmoid')]    
+        clfs = clfs + [(isotonic, 'Isotonic'), (sigmoid, 'Sigmoid')]
 
     plt.figure(1, figsize=(15, 15))
     ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
@@ -109,7 +122,7 @@ def PrintTest(est, calibrate=True):
         print ("\tProfit: %1.4f" % (np.average(prob_pos - y_test)))
         print(metrics.classification_report(y_test, clf.predict(X_test)))
         Compete(prob_pos, margin1 = 1)
-        
+
         fraction_of_positives, mean_predicted_value = \
             calibration_curve(y_test, prob_pos, n_bins=50)
 
@@ -139,7 +152,7 @@ def Compete(y_proba1, y_proba2 = y_dummy, margin1 = 1, margin2 = 1):
     profit2 = premium1 - y_test
     print ('1. Profit: ', np.sum(np.select([selector1], [profit1])) / np.sum(selector1), ', deals: ', np.sum(selector1) / selector1.shape[0])
     print ('2: Profit: ', np.sum(np.select([selector2], [profit2])) / np.sum(selector2), ', deals: ', np.sum(selector2) / selector2.shape[0])
-    
+
 print ("Logistic Regression")
 lr = LogisticRegression()
 lr.fit(X_train, y_train)
@@ -159,12 +172,12 @@ if BAYES == 1:
     print ("Naive Bayes")
     nb = GaussianNB()
     PrintTest(nb)
-   
+
 if RF == 1:
     print ("Forest")
     rf = ensemble.RandomForestClassifier(n_estimators=500, n_jobs = -1, random_state=11, verbose=0)
     PrintTest(rf)
-    
+
 if GP == 1:
     print ("Gaussian Process Classifier")
     kernel = 1.0 * RBF([1.0])
@@ -187,18 +200,19 @@ X_train = X_train.astype(np.float32)
 y_train = y_train.values.astype(np.int32)
 
 if KERAS == 1:
-    print ("Keras")
-    def CreateModel():
-    	model = Sequential()
-    	model.add(Dense(12, input_dim=X.shape[1], activation='relu'))
-    	model.add(Dense(6, activation='relu'))
-    	model.add(Dense(1, activation='sigmoid', kernel_regularizer=regularizers.l2(0.001), activity_regularizer=regularizers.l1(0.001)))
-    	model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['mae'])
-    	return model
-    
-    model = KerasClassifier(build_fn=CreateModel, epochs=50, batch_size=100, verbose=0)
-    print("\n")
-    PrintTest(model)
+    with Profiler() as p:
+        print ("Keras")
+        def CreateModel():
+        	model = Sequential()
+        	model.add(Dense(12, input_dim=X.shape[1], activation='relu'))
+        	model.add(Dense(6, activation='relu'))
+        	model.add(Dense(1, activation='sigmoid', kernel_regularizer=regularizers.l2(0.001), activity_regularizer=regularizers.l1(0.001)))
+        	model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['mae'])
+        	return model
+
+        model = KerasClassifier(build_fn=CreateModel, epochs=50, batch_size=100, verbose=0)
+        print("\n")
+        PrintTest(model)
 
 if LASAGNE == 1:
     print ("Lasagne")
@@ -208,18 +222,18 @@ if LASAGNE == 1:
         (DenseLayer, {'num_units': 6}),
         (DenseLayer, {'num_units': 1, 'nonlinearity': nonlinearities.sigmoid}),
     ]
-    
+
     ls = NeuralNet(
         layers=layers0,
         max_epochs=50,
-    
+
         update=updates.adam,
-    
+
         objective_l2=0.001,
         objective_loss_function=objectives.binary_crossentropy,
-    
+
         train_split=TrainSplit(eval_size=0.25),
         verbose=0
     )
-    
+
     PrintTest(ls, calibrate=False)
