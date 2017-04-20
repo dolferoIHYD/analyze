@@ -1,5 +1,6 @@
 import os
 import time
+import psutil
 
 # Keras backend settings
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
@@ -49,6 +50,7 @@ class Profiler(object):
     def __exit__(self, type, value, traceback):
         print('Elapsed time: {:.3f} sec'.format(time.time()-self._startTime))
 
+LR = 0
 KNN = 0
 SV = 0
 BAYES = 0
@@ -81,11 +83,10 @@ X = preprocessing.scale(XX)
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.5, random_state = 11)
 
-print ("Dummy")
+
 y_dummy = np.empty_like(y_test)
-print(y_dummy)
 y_dummy[:] = np.average(y_test.values)
-print(y_dummy)
+
 
 average_probability = np.average(y_dummy)
 print ('probability: ', average_probability)
@@ -108,7 +109,10 @@ def PrintTest(est, calibrate=True):
     ax1.plot([average_probability, average_probability], [0, 1], "k-", label="Average")
     for clf, name in clfs:
         clf.fit(X_train, y_train)
+        cpu_percent = psutil.cpu_percent(percpu=False, interval=30)
+        memory_percent = psutil.virtual_memory().percent
         if hasattr(clf, "predict_proba"):
+            print('predict probabilities X_test: {}'.format(clf.predict_proba(X_test)))
             prob_pos = clf.predict_proba(X_test)[:,-1]
             print ('log_loss: ', metrics.log_loss(y_test, prob_pos))
         else:  # use decision function
@@ -121,6 +125,8 @@ def PrintTest(est, calibrate=True):
         print("\tBrier: %1.4f" % (clf_score))
         print ("\tProfit: %1.4f" % (np.average(prob_pos - y_test)))
         print(metrics.classification_report(y_test, clf.predict(X_test)))
+        print('CPU usage: {}%'.format(cpu_percent))
+        print('Memory usage: {}%'.format(memory_percent))
         Compete(prob_pos, margin1 = 1)
 
         fraction_of_positives, mean_predicted_value = \
@@ -153,87 +159,91 @@ def Compete(y_proba1, y_proba2 = y_dummy, margin1 = 1, margin2 = 1):
     print ('1. Profit: ', np.sum(np.select([selector1], [profit1])) / np.sum(selector1), ', deals: ', np.sum(selector1) / selector1.shape[0])
     print ('2: Profit: ', np.sum(np.select([selector2], [profit2])) / np.sum(selector2), ', deals: ', np.sum(selector2) / selector2.shape[0])
 
-print ("Logistic Regression")
-lr = LogisticRegression()
-lr.fit(X_train, y_train)
-PrintTest(lr)
-
-if KNN == 1:
-    print ("kNN")
-    knn = KNeighborsClassifier(100)
-    PrintTest(knn)
-
-if SV == 1:
-    print ("SVC")
-    svc = SVC(kernel='rbf', random_state = 11)
-    PrintTest(svc)
-
-if BAYES == 1:
-    print ("Naive Bayes")
-    nb = GaussianNB()
-    PrintTest(nb)
-
-if RF == 1:
-    print ("Forest")
-    rf = ensemble.RandomForestClassifier(n_estimators=500, n_jobs = -1, random_state=11, verbose=0)
-    PrintTest(rf)
-
-if GP == 1:
-    print ("Gaussian Process Classifier")
-    kernel = 1.0 * RBF([1.0])
-    gpc_rbf_isotropic = GaussianProcessClassifier(kernel=kernel)
-    PrintTest(gpc_rbf_isotropic)
-
-if MLP == 1:
-    print ("MLP (adam)")
-    mlp = MLPClassifier(solver='adam', alpha=1e-5, hidden_layer_sizes=(12, 6), random_state=11, verbose=0)
-    PrintTest(mlp)
-
-    print ("MLP (lbfgs)")
-    mlp = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(12, 6), random_state=11, verbose=0)
-    PrintTest(mlp)
-
 X_test = X_test.astype(np.float32)
 y_test = y_test.values.astype(np.int32)
 
 X_train = X_train.astype(np.float32)
 y_train = y_train.values.astype(np.int32)
 
-if KERAS == 1:
-    with Profiler() as p:
+with Profiler() as p:
+    if LR:
+        print ("Logistic Regression")
+        lr = LogisticRegression()
+        lr.fit(X_train, y_train)
+        PrintTest(lr)
+
+    if KNN == 1:
+        print ("kNN")
+        knn = KNeighborsClassifier(100)
+        PrintTest(knn)
+
+    if SV == 1:
+        print ("SVC")
+        svc = SVC(kernel='rbf', random_state = 11)
+        PrintTest(svc)
+
+    if BAYES == 1:
+        print ("Naive Bayes")
+        nb = GaussianNB()
+        PrintTest(nb)
+
+    if RF == 1:
+        print ("Forest")
+        rf = ensemble.RandomForestClassifier(n_estimators=500, n_jobs = -1, random_state=11, verbose=0)
+        PrintTest(rf)
+
+    if GP == 1:
+        print ("Gaussian Process Classifier")
+        kernel = 1.0 * RBF([1.0])
+        gpc_rbf_isotropic = GaussianProcessClassifier(kernel=kernel)
+        PrintTest(gpc_rbf_isotropic)
+
+    if MLP == 1:
+        print ("MLP (adam)")
+        mlp = MLPClassifier(solver='adam', alpha=1e-5, hidden_layer_sizes=(12, 6), random_state=11, verbose=0)
+        PrintTest(mlp)
+
+        print ("MLP (lbfgs)")
+        mlp = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(12, 6), random_state=11, verbose=0)
+        PrintTest(mlp)
+
+
+    if KERAS == 1:
+        print('\n----------------------------------------------------\n')
         print ("Keras")
         def CreateModel():
         	model = Sequential()
         	model.add(Dense(12, input_dim=X.shape[1], activation='relu'))
         	model.add(Dense(6, activation='relu'))
         	model.add(Dense(1, activation='sigmoid', kernel_regularizer=regularizers.l2(0.001), activity_regularizer=regularizers.l1(0.001)))
-        	model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['mae'])
+        	model.compile(loss='binary_crossentropy', optimizer='adam',
+                          metrics=['mae'])
         	return model
 
         model = KerasClassifier(build_fn=CreateModel, epochs=50, batch_size=100, verbose=0)
         print("\n")
         PrintTest(model)
 
-if LASAGNE == 1:
-    print ("Lasagne")
-    layers0 = [
-        (InputLayer, {'shape': (None, X.shape[1])}),
-        (DenseLayer, {'num_units': 12}),
-        (DenseLayer, {'num_units': 6}),
-        (DenseLayer, {'num_units': 1, 'nonlinearity': nonlinearities.sigmoid}),
-    ]
+    if LASAGNE == 1:
+        print ("Lasagne")
+        layers0 = [
+            (InputLayer, {'shape': (None, X.shape[1])}),
+            (DenseLayer, {'num_units': 12}),
+            (DenseLayer, {'num_units': 6}),
+            (DenseLayer, {'num_units': 1, 'nonlinearity': nonlinearities.sigmoid}),
+        ]
 
-    ls = NeuralNet(
-        layers=layers0,
-        max_epochs=50,
+        ls = NeuralNet(
+            layers=layers0,
+            max_epochs=50,
 
-        update=updates.adam,
+            update=updates.adam,
 
-        objective_l2=0.001,
-        objective_loss_function=objectives.binary_crossentropy,
+            objective_l2=0.001,
+            objective_loss_function=objectives.binary_crossentropy,
 
-        train_split=TrainSplit(eval_size=0.25),
-        verbose=0
-    )
+            train_split=TrainSplit(eval_size=0.25),
+            verbose=0
+        )
 
-    PrintTest(ls, calibrate=False)
+        PrintTest(ls, calibrate=False)

@@ -10,3 +10,4 @@ keras
 https://github.com/Lasagne/Lasagne/archive/master.zip
 nolearn
 seaborn
+psutil

@@ -46,3 +46,28 @@ Settings for all NN examples are similar so result are very close
 
 python3.5-dev (via apt)
 python3.5-tk (via apt)
+
+
+### Usage Statistic:
+Memory as M, CPU as P
+
+## Keras (Original)
+P: 39.9%
+M: 34.3%
+
+## Keras (Isotonic):
+P: 38.3%
+M: 35.0%
+
+## Keras (Sigmoid):
+P: 38.7%
+M: 35.4%
+
+## Keras Time
+136.936 sec
+
+
+## Lasagne
+Time: 43.992 sec
+P: 8.4%
+M: 35.0%
